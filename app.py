@@ -45,14 +45,16 @@ def get_list_from_html(html_code: str) -> list:
     text_list = soup.get_text().split("\n")
     cleared_text_list = []
     for text in text_list:
-        if text not in ["", '"', " ", "\xa0"]:
+        if text not in [
+            "",
+            '"',
+            " ",
+            "\xa0",
+        ] and any(char.isalnum() for char in text):
             try:
                 float(text)
             except:
-                while "\xa0" in text:
-                    text = text.replace("\xa0", " ")
-                while '"' in text:
-                    text = text.replace('"', "")
+                text = text.replace('"', "")
                 cleared_text_list.append(text)
     return cleared_text_list
 
@@ -60,13 +62,20 @@ def get_list_from_html(html_code: str) -> list:
 def html_replace_code(html_code: str, my_dict: dict) -> str:
     text_list = get_list_from_html(html_code)
     for text in text_list:
-        while "\xa0" in text:
-            text = text.replace("\xa0", " ")
+        if " " == text[0]:
+            text = text[1:]
+        if " " == text[-1]:
+            text = text[:-1]
         try:
-            new_text = my_dict[text.strip()]
+            new_text = my_dict[text.replace("\xa0", " ").strip()]
             while "." in new_text:
                 new_text = new_text.replace(".", ",")
+            before_html_code = html_code
             html_code = html_code.replace(text, new_text)
+            if before_html_code == html_code and not text.replace(",", "").isdigit():
+                html_code = translate_text(html_code)
+                print("Extra html translating")
+                return html_code
         except:
             print("I don't find it in dictionary:", text)
 
@@ -76,7 +85,8 @@ def html_replace_code(html_code: str, my_dict: dict) -> str:
 def save_dict_to_file(my_dict: dict, path: str = DICT_LIBRARY) -> None:
     with open(path, "w", encoding="utf-8") as file:
         for key, value in my_dict.items():
-            file.write(key + "\n")
+
+            file.write(key.replace("\xa0", " ") + "\n")
             file.write(value + "\n")
     print("Saving the dictionary")
 
@@ -96,10 +106,20 @@ def make_a_big_facking_dict(numpy_list: np) -> dict:
     big_facking_dict = {}
     print("Start making a big fucking dictionary")
     for row in numpy_list:
-        for i in [0, 1, 2, 5, 6, 8, 9, 10, 11, 12, 13]:
+        if (
+            type(row[0]) == str
+            and any(char.isalnum() for char in row[0])
+            and row[0] not in big_facking_dict.keys()
+            and row[0] != "\ufeff"
+        ):
+            big_facking_dict[row[0]] = ""
+
+    for row in numpy_list:
+        for i in [1, 2, 5, 6, 8, 9, 10, 11, 12, 13]:
             if (
                 i != 2
                 and type(row[i]) == str
+                and any(char.isalnum() for char in row[i])
                 and row[i] not in big_facking_dict.keys()
                 and row[i] != "\ufeff"
             ):
@@ -121,22 +141,35 @@ def translate_text(text: str) -> str:
                 messages=[
                     {
                         "role": "system",
-                        "content": f"""Translate it to {LANGUAGE}, don't change text's format, questions are splited ";\n"
-Example:
-input:
-elegancki-damski-zegarek-na-bransolecie-z-kolorowa-tarcza;
-Elegancki damski zegarek na bransolecie;
-Cechy produktu;
-Okrągła tarcza;
-Złoto-biały
+                        "content": f"""Translate it to {LANGUAGE}, don't change text format, every question are split by "\n\n" If in text not are '-', don't add it. Take into account the order of input, preserve it, and return the data in the same order. """,
+                    },
+                    {
+                        "role": "user",
+                        "content": """elegancki-damski-zegarek-na-bransolecie-z-kolorowa-tarcza
 
-output:
-elegant-ladies-watch-on-a-bracelet-with-a-colorful-dial;
-Elegant ladies watch on a bracelet;
-Product features;
-Round dial;
-Golded-white
-""",
+Elegancki damski zegarek na bransolecie
+
+Dostępny w trzech wariantach kolorystycznych: zielony, czarny, brązowy
+
+Cechy produktu
+
+Okrągła tarcza
+
+Złoto-biały""",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": """elegant-ladies-watch-on-a-bracelet-with-a-colorful-dial
+
+Elegant ladies watch on a bracelet
+
+Available in three color variations: green, black, brown
+
+Product features
+
+Round dial
+
+Golded-white""",
                     },
                     {"role": "user", "content": text},
                 ],
@@ -167,18 +200,18 @@ def translate_dict(my_dict: dict, items_per_question: int = 50) -> dict:
         else:
             list_of_text = list(non_clear_dict.keys())[i:]
         if len(list_of_text) > 1:
-            text = ";\n".join(list_of_text)
+            text = "\n\n".join(list_of_text)
         else:
             text = list_of_text[0]
         while len(text_list) != len(list_of_text) and a < 2:
             text_list = translate_text(text)
             if len(list_of_text) > 1:
-                text_list = text_list.split(";\n")
+                text_list = text_list.split("\n\n")
             else:
                 text_list = [text_list]
             print(f"List size: {len(text_list)}, that should be {len(list_of_text)}")
             a += 1
-        if a != 2:
+        if a < 2:
             for j, text in enumerate(text_list):
                 non_clear_dict[list(non_clear_dict.keys())[i + j]] = text
 
@@ -233,9 +266,6 @@ def main() -> None:
     numpy_list = open_excel_to_numpy_list()
     my_dict = make_a_big_facking_dict(numpy_list)
     save_dict_to_file(my_dict)
-    my_dict = read_dict_from_file()
-    my_dict = translate_dict(my_dict, 50)
-    my_dict = translate_dict(my_dict, 30)
     my_dict = translate_dict(my_dict, 10)
     my_dict = translate_dict(my_dict, 5)
     my_dict = translate_dict(my_dict, 1)
